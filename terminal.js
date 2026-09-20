@@ -118,7 +118,7 @@ async function initTerminal() {
     printLine(`Type 'help' for command list. Type 'login <BADGE_ID> <PASSWORD>' to authenticate additional credentials.\n`);
 
     // Log terminal session initialization
-    await logDiscrepancy(supabase, activePlayer, 'SESSION_START', `Node-07 terminal session initiated for ${activePlayer.username}.`);
+    await logDiscrepancy(supabase, activePlayer, 'SESSION_START', `Node-07 terminal session initiated for.`);
 }
 
 cmdInput.addEventListener('keydown', (e) => {
