@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TRB - SYSTEM ACCESS GATEWAY</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="auth-screen">
+
+    <div class="crt-overlay"></div>
+
+    <div class="login-dialogue">
+        <div class="dialogue-titlebar">⌛ STAGE 3 // OPERATOR GATEWAY</div>
+        <div class="dialogue-body">
+            <p class="regulatory-text" style="font-size: 12px; margin-top: 0;">
+                <strong>NOTICE:</strong> Enter your assigned Bureau credentials to connect your session to Stage 3 Terminal Node-07.
+            </p>
+
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="username">Operator Name:</label>
+                    <input type="text" id="username" placeholder="e.g., Player One" autocomplete="off" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="badge">Badge Index ID:</label>
+                    <input type="password" id="badge" placeholder="e.g., TRB-01" autocomplete="off" required>
+                </div>
+
+                <button type="submit" id="login-btn" class="submit-btn">Authorize Terminal Bridge</button>
+            </form>
+
+            <div id="error-output"></div>
+        </div>
+    </div>
+
+<script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+        const SUPABASE_URL = 'https://eefhkfhccqbxvehzdljz.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVlZmhrZmhjY3FieHZlaHpkbGp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxMzQ5MzEsImV4cCI6MjEwMDcxMDkzMX0.2PR60mHhqNbt5Xfed05YH-fo56N1-0kTEXW5L_HQHgU';
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const form = document.getElementById('login-form');
+        const errorDiv = document.getElementById('error-output');
+
+        function setStatus(msg, color = '#000000') {
+            errorDiv.style.display = 'block';
+            errorDiv.innerText = msg;
+            errorDiv.style.color = color;
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const usernameIn = document.getElementById('username').value.trim();
+            const badgeIn = document.getElementById('badge').value.trim();
+
+            setStatus('LOCATING RECORD IN DATABASE...', '#000000');
+
+            try {
+                // 1. Query Supabase users table
+                const { data: user, error } = await supabase
+                    .from('users')
+                    .select('id, username, badge_id, clearance, status')
+                    .eq('username', usernameIn)
+                    .eq('badge_id', badgeIn)
+                    .maybeSingle();
+
+                if (error) throw new Error(error.message);
+
+                if (!user) {
+                    setStatus('SEC_ERROR: Identification parameters mismatched.', '#ef4444');
+                    return;
+                }
+
+                if (user.status && user.status !== 'ACTIVE') {
+                    setStatus(`SEC_LOCK: Account flagged as ${user.status}.`, '#ef4444');
+                    return;
+                }
+
+                // 2. FORCE RESET: Automatically reset clearance to 'USER' on every login
+                const { error: updateError } = await supabase
+                    .from('users')
+                    .update({ 
+                        clearance: 'USER', 
+                        last_login: new Date().toISOString() 
+                    })
+                    .eq('id', user.id);
+
+                if (updateError) throw new Error(updateError.message);
+
+                // 3. LOG TO DISCREPANCIES TABLE
+                const { error: discError } = await supabase
+                    .from('discrepancies')
+                    .insert([
+                        { 
+                            operator_name: user.username,
+                            badge_id: user.badge_id,
+                            event_type: 'LOGIN',
+                            details: 'Operator Gateway Session Authorized',
+                            timestamp: new Date().toISOString()
+                        }
+                    ]);
+
+                if (discError) {
+                    console.error('Failed to log discrepancy:', discError.message);
+                }
+
+                // 4. Save active player profile to session storage initialized at USER
+                sessionStorage.setItem('trb_player_session', JSON.stringify({
+                    id: user.id,
+                    username: user.username,
+                    badge_id: user.badge_id,
+                    clearance: 'USER',
+                    sessionPrincipal: `${user.username} [${user.badge_id}]`
+                }));
+
+                setStatus('AUTHORIZED // CLEARANCE: [USER]. CONNECTING...', '#22c55e');
+
+                setTimeout(() => {
+                    window.location.href = 'terminal.html';
+                }, 800);
+
+            } catch (err) {
+                console.error(err);
+                setStatus(`CRITICAL_ERR: ${err.message}`, '#ef4444');
+            }
+        });
+    </script>
+</body>
+</html>

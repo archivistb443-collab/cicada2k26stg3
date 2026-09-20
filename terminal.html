@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TRB - STAGE 3 COMMAND TERMINAL</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="crt-overlay"></div>
+
+<div class="system-container">
+    <header>
+        <div class="header-brand">
+            <span class="header-seal">TRB</span>
+            <h1>TEMPORAL RECOVERY BUREAU — STAGE 3 BACKEND TERMINAL</h1>
+        </div>
+        <span class="node-tag" id="node-tag">NODE-07 ONLINE</span>
+    </header>
+
+    <div class="viewport-layout">
+        <nav>
+            <div class="directory-label">> System Directory</div>
+            <ul>
+                <li><a onclick="execShortcut('help')">Help Menu</a></li>
+                <li><a onclick="execShortcut('whoami')">Operator Telemetry</a></li>
+                <li><a onclick="execShortcut('ls')">List Files</a></li>
+                <li><a onclick="execShortcut('logout')">Terminate Session</a></li>
+            </ul>
+            <div class="directory-label" style="margin-top: 20px;">> Clearance Monitor</div>
+            <p id="operator-info-pane" style="color: #cbd5e1; font-size: 11px; line-height: 1.4;">
+                Loading matrix...
+            </p>
+        </nav>
+
+        <main>
+            <h2>Interactive Command Line Shell</h2>
+            <div class="metadata-strip">
+                PROTOCOL: HTTPS/JSON-SYNC | CLEARANCE ESCALATION ENGINE ACTIVE
+            </div>
+
+            <div class="terminal-viewport">
+                <div id="output-log">================================================================================
+  TEMPORAL RECOVERY BUREAU (TRB) — STAGE 3 TERMINAL SHELL
+================================================================================
+  Authenticating local operator bridge...</div>
+
+                <div class="input-line">
+                    <span class="prompt-label" id="prompt-str">operator@trb-node07:~$</span>
+                    <input type="text" id="cmd-input" autofocus autocomplete="off" spellcheck="false">
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script type="module" src="terminal.js"></script>
+</body>
+</html>
