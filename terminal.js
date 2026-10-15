@@ -84,7 +84,6 @@ async function getClearedFiles(directory) {
 
     const cleanDir = directory.replace(/^\/|\/$/g, '').toLowerCase();
     
-    // Filter matching directory or path structure client-side
     return allFiles.filter(item => {
         const itemDir = (item.directory || '').toLowerCase();
         const itemPath = (item.path || '').toLowerCase();
