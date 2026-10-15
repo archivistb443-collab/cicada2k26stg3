@@ -59,15 +59,15 @@
             setStatus('LOCATING RECORD IN DATABASE...', '#000000');
 
             try {
-                // 1. Query Supabase users table
-                const { data: user, error } = await supabase
-                    .from('users')
-                    .select('id, username, badge_id, clearance, status')
-                    .eq('username', usernameIn)
-                    .eq('badge_id', badgeIn)
-                    .maybeSingle();
+                // FIXED: Query profile securely via RPC instead of direct table select/update
+                const { data: profileData, error: queryError } = await supabase.rpc('get_operator_profile', {
+                    input_username: usernameIn,
+                    input_badge: badgeIn
+                });
 
-                if (error) throw new Error(error.message);
+                if (queryError) throw new Error(queryError.message);
+
+                const user = profileData && profileData.length > 0 ? profileData[0] : null;
 
                 if (!user) {
                     setStatus('SEC_ERROR: Identification parameters mismatched.', '#ef4444');
@@ -79,18 +79,7 @@
                     return;
                 }
 
-                // 2. FORCE RESET: Automatically reset clearance to 'USER' on every login
-                const { error: updateError } = await supabase
-                    .from('users')
-                    .update({ 
-                        clearance: 'USER', 
-                        last_login: new Date().toISOString() 
-                    })
-                    .eq('id', user.id);
-
-                if (updateError) throw new Error(updateError.message);
-
-                // 3. LOG TO DISCREPANCIES TABLE
+                // LOG TO DISCREPANCIES TABLE securely
                 const { error: discError } = await supabase
                     .from('discrepancies')
                     .insert([
@@ -107,9 +96,9 @@
                     console.error('Failed to log discrepancy:', discError.message);
                 }
 
-                // 4. Save active player profile to session storage initialized at USER
+                // Save active player profile to session storage initialized securely at USER tier
                 sessionStorage.setItem('trb_player_session', JSON.stringify({
-                    id: user.id,
+                    id: user.id || null,
                     username: user.username,
                     badge_id: user.badge_id,
                     clearance: 'USER',
