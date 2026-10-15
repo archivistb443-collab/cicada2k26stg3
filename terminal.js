@@ -4,6 +4,15 @@ const SUPABASE_URL = 'https://eefhkfhccqbxvehzdljz.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVlZmhrZmhjY3FieHZlaHpkbGp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxMzQ5MzEsImV4cCI6MjEwMDcxMDkzMX0.2PR60mHhqNbt5Xfed05YH-fo56N1-0kTEXW5L_HQHgU';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+const ACCESSIBLE_TIERS = {
+    'USER': ['USER'],
+    'CONTRACTOR': ['USER', 'CONTRACTOR'],
+    'COMMUNICATIONS': ['USER', 'CONTRACTOR', 'COMMUNICATIONS'],
+    'RESEARCH': ['USER', 'CONTRACTOR', 'RESEARCH'],
+    'SECURITY': ['USER', 'CONTRACTOR', 'COMMUNICATIONS', 'RESEARCH', 'SECURITY'],
+    'ADMIN': ['USER', 'CONTRACTOR', 'COMMUNICATIONS', 'RESEARCH', 'SECURITY', 'ADMIN']
+};
+
 let activePlayer = null;
 let currentDirectory = '/';
 
@@ -39,29 +48,22 @@ function updateUI() {
     `;
 }
 
+// Clean backend-driven discrepancy logger via RPC
 export async function logDiscrepancy(supabaseClient, player, eventType, details = '') {
     if (!supabaseClient) return;
 
-    const safeDetails = String(details).substring(0, 500);
-
     try {
-        await supabaseClient.from('discrepancies').insert([
-            {
-                operator_name: player?.username || player?.character_name || 'ANONYMOUS',
-                badge_id: player?.badge_id || player?.activeBadge || 'UNKNOWN',
-                event_type: eventType,
-                details: safeDetails,
-                timestamp: new Date().toISOString()
-            }
-        ]);
+        await supabaseClient.rpc('log_discrepancy', {
+            badge_id: player?.badge_id || player?.activeBadge || null,
+            operator_name: player?.username || null,
+            event_type: eventType,
+            details: String(details).substring(0, 500)
+        });
     } catch (err) {
-        console.error('Failed to log event:', err);
+        console.error('Failed to log event via RPC:', err);
     }
 }
 
-/**
- * FIXED: Fetch files securely via the list_files RPC function instead of querying filesystem directly
- */
 async function getClearedFiles(directory) {
     const userTier = (activePlayer.clearance || 'USER').toUpperCase();
 
@@ -77,7 +79,6 @@ async function getClearedFiles(directory) {
     if (!allFiles) return [];
 
     if (directory === '/') {
-        // Return top-level files or directories
         return allFiles;
     }
 
@@ -110,7 +111,7 @@ async function initTerminal() {
     printLine(`Authorization Clearance Tier: [${activePlayer.clearance}]`, 'sys-info');
     printLine(`Type 'help' for command list. Type 'login <BADGE_ID> <PASSWORD>' to authenticate additional credentials.\n`);
 
-    await logDiscrepancy(supabase, activePlayer, 'SESSION_START', `Node-07 terminal session initiated.`);
+    await logDiscrepancy(supabase, activePlayer, 'SESSION_START', `Node-07 terminal session initiated for ${activePlayer.username}.`);
 }
 
 cmdInput.addEventListener('keydown', (e) => {
@@ -151,19 +152,16 @@ async function handleCommand(input) {
     }
 
     if (cmd === 'ls') {
-        const playerClearance = activePlayer.clearance || 'PUBLIC';
+        printLine(`Directory listing for ${currentDirectory}:`, 'sys-info');
+        const records = await getClearedFiles(currentDirectory);
 
-        const { data: fileList, error } = await supabase.rpc('list_files', {
-            player_clearance: playerClearance
-        });
-
-        if (error) {
-            printLine(`ERR_DIR_READ: ${error.message}`, 'sys-err');
+        if (!records || records.length === 0) {
+            printLine('  (no authorized files or subdirectories found)', 'sys-err');
             return;
         }
 
-        fileList.forEach(file => {
-            printLine(`${file.name || file.record_file_name} (${file.path})`, 'sys-info');
+        records.forEach(file => {
+            printLine(`  [FILE] ${file.record_file_name || file.name} (${file.path || currentDirectory})`, 'txt-file');
         });
         return;
     }
@@ -208,8 +206,7 @@ async function handleCommand(input) {
         const records = await getClearedFiles(currentDirectory);
         const match = records.find(r => 
             (r.record_file_name && r.record_file_name.toLowerCase() === arg1.toLowerCase()) ||
-            (r.path && r.path.toLowerCase() === arg1.toLowerCase()) ||
-            (r.path && r.path.toLowerCase() === `${currentDirectory}/${arg1}`.replace('//', '/').toLowerCase())
+            (r.path && r.path.toLowerCase() === arg1.toLowerCase())
         );
 
         if (!match) {
@@ -231,9 +228,10 @@ async function handleCommand(input) {
 
         await logDiscrepancy(supabase, activePlayer, 'SECURITY_VIOLATION', `Foreign network egress attempt triggered for: ${arg1 || 'unknown'}. Session locked out.`);
 
-        // FIXED: Removed direct client-side .from('users').update() since UPDATE policies are dropped. 
-        // Session downgrade is handled entirely via local session clearance reset & redirect.
-        activePlayer.clearance = 'USER';
+        await supabase.rpc('update_user_clearance', {
+            target_user_id: activePlayer.id,
+            new_clearance: 'USER'
+        });
 
         setTimeout(() => {
             printLine(` CRITICAL SYSTEM LOCKOUT!`, 'sys-err');
@@ -253,34 +251,38 @@ async function handleCommand(input) {
             printLine('Usage: login <BADGE_ID> <PASSWORD>', 'sys-alert');
             return;
         }
-
+    
         printLine(`[AUTH_DAEMON] Dispatching credential payload for principal ID: ${arg1}...`, 'sys-info');
-
+    
         const { data: personaData, error: queryError } = await supabase.rpc('login_persona', {
             input_badge: arg1,
             input_code: arg2
         });
-
+    
         const targetPersona = personaData && personaData.length > 0 ? personaData[0] : null;
 
         if (queryError || !targetPersona) {
             printLine('ERR_AUTH_FAILED: Invalid credentials or principal context rejected by directory service.', 'sys-err');
-            
-            await logDiscrepancy(supabase, activePlayer, 'FAILED_LOGIN', `Failed login attempt`);
+            await logDiscrepancy(supabase, activePlayer, 'FAILED_LOGIN', `Failed login attempt using badge ID: ${arg1}`);
             return;
         }
-
+    
         printLine(`[AUTH_SUCCESS] Principal verified: ${targetPersona.character_name} (${targetPersona.badge_id})`, 'sys-success');
         printLine(`[TOKEN_EXCHANGE] Elevating session clearance scope to: [${targetPersona.clearance}]...`, 'sys-info');
-
-        // FIXED: Removed direct .from('users').update() since client updates are blocked by RLS.
-        // Session clearance elevation is updated securely in local/session state.
-
+    
+        // Safely update database clearance if user ID is present in the active session
+        if (activePlayer.id) {
+            await supabase.rpc('update_user_clearance', {
+                target_user_id: activePlayer.id,
+                new_clearance: targetPersona.clearance
+            });
+        }
+    
         activePlayer.clearance = targetPersona.clearance;
         activePlayer.activeBadge = targetPersona.badge_id;
         activePlayer.sessionPrincipal = `${targetPersona.character_name} [${targetPersona.badge_id}]`;
         sessionStorage.setItem('trb_player_session', JSON.stringify(activePlayer));
-
+    
         updateUI();
         printLine(`Session context updated: Principal bound to tier [${targetPersona.clearance}].`, 'sys-success');
         printLine(`Type 'ls' to list accessible directory resources.`, 'sys-info');
@@ -290,7 +292,11 @@ async function handleCommand(input) {
     }
 
     if (cmd === 'logout') {
-        // FIXED: Removed client-side table update. Session state is terminated locally.
+        await supabase.rpc('update_user_clearance', {
+            target_user_id: activePlayer.id,
+            new_clearance: 'USER'
+        });
+
         await logDiscrepancy(supabase, activePlayer, 'LOGOUT', 'Terminal session terminated by operator.');
 
         sessionStorage.removeItem('trb_player_session');
@@ -302,16 +308,12 @@ async function handleCommand(input) {
     printLine(`Command '${cmd}' unrecognized. Type 'help' for command directory.`, 'sys-err');
 }
 
-/**
- * FIXED: handleLogin updated to use the secure get_operator_profile RPC and removed client-side table updates
- */
 export async function handleLogin(usernameIn, badgeIn) {
     if (!usernameIn || !badgeIn) {
         return { success: false, message: 'SEC_ERROR: Missing username or badge ID parameters.', color: '#ef4444' };
     }
 
     try {
-        // Query via secure RPC instead of direct table select
         const { data: profileData, error } = await supabase.rpc('get_operator_profile', {
             input_username: usernameIn,
             input_badge: badgeIn
@@ -329,9 +331,13 @@ export async function handleLogin(usernameIn, badgeIn) {
             return { success: false, message: `SEC_LOCK: Account flagged as ${user.status}.`, color: '#ef4444' };
         }
 
-        // Save active player profile to session storage
+        await supabase.rpc('update_user_clearance', {
+            target_user_id: user.id,
+            new_clearance: 'USER'
+        });
+
         sessionStorage.setItem('trb_player_session', JSON.stringify({
-            id: user.id || null,
+            id: user.id,
             username: user.username,
             badge_id: user.badge_id,
             alias: user.alias || user.username,

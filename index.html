@@ -51,6 +51,20 @@
             errorDiv.style.color = color;
         }
 
+        // Secure RPC discrepancy logger matching database schema
+        async function logDiscrepancyRPC(player, eventType, details = '') {
+            try {
+                await supabase.rpc('log_discrepancy', {
+                    badge_id: player?.badge_id || 'UNKNOWN',
+                    operator_name: player?.username || 'ANONYMOUS',
+                    event_type: eventType,
+                    details: String(details).substring(0, 500)
+                });
+            } catch (err) {
+                console.error('Failed to log discrepancy via RPC:', err);
+            }
+        }
+
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const usernameIn = document.getElementById('username').value.trim();
@@ -59,7 +73,7 @@
             setStatus('LOCATING RECORD IN DATABASE...', '#000000');
 
             try {
-                // FIXED: Query profile securely via RPC instead of direct table select/update
+                // Query profile securely via RPC
                 const { data: profileData, error: queryError } = await supabase.rpc('get_operator_profile', {
                     input_username: usernameIn,
                     input_badge: badgeIn
@@ -79,22 +93,8 @@
                     return;
                 }
 
-                // LOG TO DISCREPANCIES TABLE securely
-                const { error: discError } = await supabase
-                    .from('discrepancies')
-                    .insert([
-                        { 
-                            operator_name: user.username,
-                            badge_id: user.badge_id,
-                            event_type: 'LOGIN',
-                            details: 'Operator Gateway Session Authorized',
-                            timestamp: new Date().toISOString()
-                        }
-                    ]);
-
-                if (discError) {
-                    console.error('Failed to log discrepancy:', discError.message);
-                }
+                // Log login event securely via backend RPC
+                await logDiscrepancyRPC(user, 'LOGIN', 'Operator Gateway Session Authorized');
 
                 // Save active player profile to session storage initialized securely at USER tier
                 sessionStorage.setItem('trb_player_session', JSON.stringify({
