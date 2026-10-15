@@ -4,15 +4,6 @@ const SUPABASE_URL = 'https://eefhkfhccqbxvehzdljz.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVlZmhrZmhjY3FieHZlaHpkbGp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUxMzQ5MzEsImV4cCI6MjEwMDcxMDkzMX0.2PR60mHhqNbt5Xfed05YH-fo56N1-0kTEXW5L_HQHgU';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const ACCESSIBLE_TIERS = {
-    'USER': ['USER'],
-    'CONTRACTOR': ['USER', 'CONTRACTOR'],
-    'COMMUNICATIONS': ['USER', 'CONTRACTOR', 'COMMUNICATIONS'],
-    'RESEARCH': ['USER', 'CONTRACTOR', 'RESEARCH'],
-    'SECURITY': ['USER', 'CONTRACTOR', 'COMMUNICATIONS', 'RESEARCH', 'SECURITY'],
-    'ADMIN': ['USER', 'CONTRACTOR', 'COMMUNICATIONS', 'RESEARCH', 'SECURITY', 'ADMIN']
-};
-
 let activePlayer = null;
 let currentDirectory = '/';
 
@@ -34,6 +25,40 @@ window.execShortcut = (command) => {
     handleCommand(command);
     cmdInput.value = '';
 };
+
+export async function loadMissionText(targetElementId) {
+    const targetEl = document.getElementById(targetElementId);
+    if (!targetEl) return;
+
+    const session = await verifyOperatorClearance();
+    if (!session || !session.success) return;
+
+    try {
+        const response = await fetch('security.txt');
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: Failed to locate mission directive file.`);
+        }
+
+        const text = await response.text();
+        targetEl.replaceChildren();
+
+        const pre = document.createElement("pre");
+        pre.className = "regulatory-text";
+        pre.style.whiteSpace = "pre-wrap";
+        pre.style.fontFamily = "inherit";
+        pre.style.margin = "0";
+        pre.textContent = text;
+
+        targetEl.appendChild(pre);
+
+    } catch (err) {
+        console.error("[LOAD-MISSION-FAIL]", err);
+        targetEl.innerHTML = `<p style="color: #ff0000; font-weight: bold; margin: 0;">
+            SEC_ERROR: Unable to retrieve local directive payload [${err.message}].
+        </p>`;
+    }
+}
 
 function updateUI() {
     const currentBadge = activePlayer.activeBadge || activePlayer.badge_id;
@@ -136,6 +161,7 @@ async function handleCommand(input) {
         printLine('  ls                         - List authorized directory contents');
         printLine('  cd <directory>             - Change active directory path');
         printLine('  cat <filename>             - Read record payload from database');
+        printLine('  protocol                   - Print contents of security protocol directives');
         printLine('  get / download <filename>  - Transfer file via external network route');
         printLine('  login <BADGE_ID> <PASSWD>  - Authenticate credentials to elevate clearance scope');
         printLine('  logout                     - Terminate active session and return to gateway');
@@ -147,6 +173,24 @@ async function handleCommand(input) {
         printLine(`ACTIVE PRINCIPAL       : ${activePlayer.sessionPrincipal}`);
         printLine(`AUTHORIZATION SCOPE    : [${activePlayer.clearance}]`);
         printLine(`ACTIVE PATH            : ${currentDirectory}`);
+        return;
+    }
+
+    if (cmd === 'protocol') {
+        printLine('[SYS_FETCH] Requesting security protocol directives from security.txt...', 'sys-info');
+        try {
+            const response = await fetch('security.txt');
+            if (!response.ok) throw new Error(`HTTP ${response.status}: security.txt not found.`);
+            const text = await response.text();
+            
+            printLine(`\n--- PROTOCOL DIRECTIVE REGISTRY ---`, 'sys-success');
+            text.split('\n').forEach(line => printLine(line, 'txt-file'));
+            printLine(`---------------------------------------\n`, 'sys-success');
+            
+            await logDiscrepancy(supabase, activePlayer, 'PROTOCOL_INSPECTION', 'Read security protocol directives via terminal.');
+        } catch (err) {
+            printLine(`[ERR_PROTOCOL] Failed to load security file: ${err.message}`, 'sys-err');
+        }
         return;
     }
 
@@ -269,7 +313,6 @@ async function handleCommand(input) {
         printLine(`[AUTH_SUCCESS] Principal verified: ${targetPersona.character_name} (${targetPersona.badge_id})`, 'sys-success');
         printLine(`[TOKEN_EXCHANGE] Elevating session clearance scope to: [${targetPersona.clearance}]...`, 'sys-info');
     
-        // Safely update database clearance if user ID is present in the active session
         if (activePlayer.id) {
             await supabase.rpc('update_user_clearance', {
                 target_user_id: activePlayer.id,

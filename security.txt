@@ -1,0 +1,8 @@
+STANDARD PROTOCOL: CREDENTIAL RECOVERY
+
+In the event of physical badge loss, terminal access is automatically rolled back to baseline provisioning. 
+
+DEFAULT ID FORMAT: BHQ-[FirstName][LastName]
+DEFAULT PASSWORD FORMAT: FACTORY_[DepartmentCode]_000
+
+*NOTE: The legacy Department Code for Communications is 3976.
