@@ -306,7 +306,14 @@ async function handleCommand(input) {
 
         if (queryError || !targetPersona) {
             printLine('ERR_AUTH_FAILED: Invalid credentials or principal context rejected by directory service.', 'sys-err');
-            await logDiscrepancy(supabase, activePlayer, 'FAILED_LOGIN', `Failed login attempt using badge ID: ${arg1}`);
+            
+            // Log failed attempt showing the current operator and the bad badge ID they tried
+            await logDiscrepancy(
+                supabase, 
+                { badge_id: arg1, username: `${activePlayer.username} [Attempted: ${arg1}]` }, 
+                'FAILED_LOGIN', 
+                `Operator ${activePlayer.username} failed to elevate using badge ID: ${arg1}`
+            );
             return;
         }
     
@@ -329,7 +336,13 @@ async function handleCommand(input) {
         printLine(`Session context updated: Principal bound to tier [${targetPersona.clearance}].`, 'sys-success');
         printLine(`Type 'ls' to list accessible directory resources.`, 'sys-info');
 
-        await logDiscrepancy(supabase, activePlayer, 'LOGIN', `Elevated session scope to tier [${targetPersona.clearance}] using badge ID ${targetPersona.badge_id}.`);
+        // Log successful elevation using the target character's name/alias and badge
+        await logDiscrepancy(
+            supabase, 
+            { badge_id: targetPersona.badge_id, username: targetPersona.character_name }, 
+            'LOGIN', 
+            `Operator elevated session scope to tier [${targetPersona.clearance}] as ${targetPersona.character_name} (${targetPersona.badge_id}).`
+        );
         return;
     }
 
