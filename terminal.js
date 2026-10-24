@@ -288,8 +288,7 @@ async function handleCommand(input) {
         }, 3000);
         return;
     }
-
-    if (cmd === 'login') {
+if (cmd === 'login') {
         if (!arg1 || !arg2) {
             printLine('Usage: login <BADGE_ID> <PASSWORD>', 'sys-alert');
             return;
@@ -297,36 +296,26 @@ async function handleCommand(input) {
     
         printLine(`[AUTH_DAEMON] Dispatching credential payload for principal ID: ${arg1}...`, 'sys-info');
     
-        const { data: personaData, error: queryError } = await supabase.rpc('login_persona', {
+        // Calls the unified backend RPC function
+        const { data: responseData, error: queryError } = await supabase.rpc('handle_persona_login', {
             input_badge: arg1,
-            input_code: arg2
+            input_code: arg2,
+            operator_badge: activePlayer.badgeID || activePlayer.badge_id || '1',
+            operator_username: activePlayer.username || 'ANONYMOUS'
         });
-    
-        const targetPersona = personaData && personaData.length > 0 ? personaData[0] : null;
 
-        if (queryError || !targetPersona) {
+        if (queryError || !responseData || !responseData.success) {
+            const errMessage = responseData?.error || queryError?.message || 'Unknown authentication failure.';
             printLine('ERR_AUTH_FAILED: Invalid credentials or principal context rejected by directory service.', 'sys-err');
-            
-            // Log failed attempt showing the current operator and the bad badge ID they tried
-            await logDiscrepancy(
-                supabase, 
-                { badge_id: arg1, username: `${activePlayer.username} [Attempted: ${arg1}]` }, 
-                'FAILED_LOGIN', 
-                `Operator ${activePlayer.username} failed to elevate using badge ID: ${arg1}`
-            );
             return;
         }
+
+        const targetPersona = responseData.persona;
     
         printLine(`[AUTH_SUCCESS] Principal verified: ${targetPersona.character_name} (${targetPersona.badge_id})`, 'sys-success');
         printLine(`[TOKEN_EXCHANGE] Elevating session clearance scope to: [${targetPersona.clearance}]...`, 'sys-info');
     
-        if (activePlayer.id) {
-            await supabase.rpc('update_user_clearance', {
-                target_user_id: activePlayer.id,
-                new_clearance: targetPersona.clearance
-            });
-        }
-    
+        // Update local session state cache
         activePlayer.clearance = targetPersona.clearance;
         activePlayer.activeBadge = targetPersona.badge_id;
         activePlayer.sessionPrincipal = `${targetPersona.character_name} [${targetPersona.badge_id}]`;
@@ -335,14 +324,6 @@ async function handleCommand(input) {
         updateUI();
         printLine(`Session context updated: Principal bound to tier [${targetPersona.clearance}].`, 'sys-success');
         printLine(`Type 'ls' to list accessible directory resources.`, 'sys-info');
-
-        // Log successful elevation using the target character's name/alias and badge
-        await logDiscrepancy(
-            supabase, 
-            { badge_id: targetPersona.badge_id, username: targetPersona.character_name }, 
-            'LOGIN', 
-            `Operator elevated session scope to tier [${targetPersona.clearance}] as ${targetPersona.character_name} (${targetPersona.badge_id}).`
-        );
         return;
     }
 
@@ -354,7 +335,7 @@ async function handleCommand(input) {
 
         await logDiscrepancy(supabase, activePlayer, 'LOGOUT', 'Terminal session terminated by operator.');
 
-        sessionStorage.removeItem('trb_player_session');
+        sessionStorage.removeItem('trb_current_login');
         printLine('Terminating session connection...', 'sys-info');
         setTimeout(() => window.location.href = 'index.html', 500);
         return;
