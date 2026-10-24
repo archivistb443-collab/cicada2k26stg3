@@ -1,8 +1,56 @@
+TEMPORAL RECOVERY BUREAU (TRB) // STANDARD PROTOCOLS
+DOCUMENT: SP-001 // REVISION 14 // ALL OPERATORS MUST COMPLY
+==============================================================================
+
+STANDARD PROTOCOL: TERMINAL SESSION HYGIENE
+Operators must close all active terminal sessions before leaving a station.
+Sessions idle for more than ten minutes are terminated automatically.
+
+STANDARD PROTOCOL: ARCHIVE HANDLING
+Cold-storage micro-tape arrays may only be accessed through approved index
+nodes. Physical removal of tape cartridges from Sector 05 is prohibited.
+
+STANDARD PROTOCOL: TIMELINE INCIDENT REPORTING
+Any observed temporal discrepancy must be filed with the Archival Custodian
+Desk within one working cycle. Do not attempt to correct a discrepancy
+without written authorization from a department head.
+
 STANDARD PROTOCOL: CREDENTIAL RECOVERY
 
-In the event of physical badge loss, terminal access is automatically rolled back to baseline provisioning. 
+In the event of physical badge loss, terminal access is automatically rolled back to baseline provisioning.
 
 DEFAULT ID FORMAT: BHQ-[FirstName][LastName]
 DEFAULT PASSWORD FORMAT: FACTORY_[DepartmentCode]_000
 
 *NOTE: The legacy Department Code for Communications is 3976.
+
+STANDARD PROTOCOL: CLEARANCE ESCALATION
+Requests for elevated clearance must be countersigned by two supervising
+operators. Temporary escalation expires at the end of the current shift.
+
+STANDARD PROTOCOL: DATA TRANSMISSION INTERCEPTS
+Intercepted transmissions are logged, hashed and sealed before analysis.
+Raw intercepts must never be shared outside the issuing division.
+
+STANDARD PROTOCOL: PHYSICAL ARTIFACT RECOVERY
+Recovered artifacts are to be photographed in place, tagged with an issue ID
+and transferred to a lead-lined container. Direct contact is discouraged.
+
+STANDARD PROTOCOL: CHRONO-GRID MAINTENANCE
+Grid recalibration is performed on the first cycle of each month. Operators
+must not initiate manual recalibration during a scheduled audit window.
+
+STANDARD PROTOCOL: PUBLIC FOIA REQUESTS
+Requests for unredacted copies of Level-3 or higher records require Form
+TRB-FOIA-99 and a notarized declaration of timeline residency.
+
+STANDARD PROTOCOL: DEPARTMENTAL AUDITS
+Each department is audited once per quarter. Audit logs are retained for
+ninety years and may be reviewed only by cleared personnel.
+
+STANDARD PROTOCOL: EMERGENCY LOCKDOWN
+On a Class-4 anomaly, all terminals lock automatically. Operators must
+proceed to their assigned muster point and await the all-clear signal.
+
+------------------------------------------------------------------------------
+END OF DOCUMENT // SP-001 // DISTRIBUTION: ALL TRB PERSONNEL
